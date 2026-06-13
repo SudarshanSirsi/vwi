@@ -1,0 +1,39 @@
+# Global hotkey that opens the overlay.
+# Supported modifiers: Alt, Ctrl, Shift, Win
+# Supported keys: A-Z, 0-9, Space, Tab, Enter, Esc, F1-F12
+hotkey = "Ctrl+Shift+Space"
+
+# IMPORTANT: Root-level keys like `hotkey` must come BEFORE any [section] header.
+# [ui] and [projects] are table sections. If you put `hotkey` below [ui], TOML
+# will try to parse it as a field inside the [ui] table, causing a parse error.
+
+# Optional UI customization.  All fields have defaults;
+# uncomment only what you want to change.
+[ui]
+# show_overlay = true       # set to false to hide popup and switch silently
+# max_height = 400          # cap overlay height; scroll if content exceeds (0 = auto-fit)
+# font_height = 18
+# line_height = 32
+# pad_x = 24
+# pad_y = 16
+# min_width = 560
+# key_color = 0xFFA500      # orange accent
+# text_color = 0xE0E0E0     # light gray
+# bg_color = 0x1A1A1A       # dark background
+# border_color = 0x333333   # subtle border
+
+[projects.backend]
+key = "b"
+match = "credilinq.backend"
+
+[projects.react]
+key = "r"
+match = "alexi.react"
+
+[projects.poc]
+key = "p"
+match = "alexi.poc.keystone"
+
+[projects.alexi]
+key = "a"
+match = "credilinq.alexi"

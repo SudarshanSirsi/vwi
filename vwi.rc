@@ -1,0 +1,3 @@
+// Embed vwi.ico into the EXE as resource ID 101.
+// This makes the icon available from the EXE itself — no external file needed.
+101 ICON "vwi.ico"
