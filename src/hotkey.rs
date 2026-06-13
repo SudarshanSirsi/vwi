@@ -1,4 +1,5 @@
 use crate::logger;
+use crate::vk::*;
 use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
@@ -31,22 +32,30 @@ pub fn parse_and_register(hwnd: HWND, hotkey_str: &str) {
 
     for part in &parts {
         match *part {
-            "Alt" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | 0x0001),            // MOD_ALT
-            "Ctrl" | "Control" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | 0x0002), // MOD_CONTROL
-            "Shift" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | 0x0004),          // MOD_SHIFT
-            "Win" | "Windows" | "Super" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | 0x0008), // MOD_WIN
+            "Alt" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | MOD_ALT),
+            "Ctrl" | "Control" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | MOD_CONTROL),
+            "Shift" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | MOD_SHIFT),
+            "Win" | "Windows" | "Super" => modifiers = HOT_KEY_MODIFIERS(modifiers.0 | MOD_WIN),
             k if k.len() == 1 => {
                 let c = k.chars().next().unwrap();
                 key_vk = c.to_ascii_uppercase() as u32;
             }
-            "Space" => key_vk = 0x20,   // VK_SPACE
-            "Tab" => key_vk = 0x09,     // VK_TAB
-            "Enter" | "Return" => key_vk = 0x0D, // VK_RETURN
-            "Esc" | "Escape" => key_vk = 0x1B,   // VK_ESCAPE
-            "F1" => key_vk = 0x70, "F2" => key_vk = 0x71, "F3" => key_vk = 0x72,
-            "F4" => key_vk = 0x73, "F5" => key_vk = 0x74, "F6" => key_vk = 0x75,
-            "F7" => key_vk = 0x76, "F8" => key_vk = 0x77, "F9" => key_vk = 0x78,
-            "F10" => key_vk = 0x79, "F11" => key_vk = 0x7A, "F12" => key_vk = 0x7B,
+            "Space" => key_vk = VK_SPACE,
+            "Tab" => key_vk = VK_TAB,
+            "Enter" | "Return" => key_vk = VK_RETURN,
+            "Esc" | "Escape" => key_vk = VK_ESCAPE,
+            "F1" => key_vk = VK_F1,
+            "F2" => key_vk = VK_F2,
+            "F3" => key_vk = VK_F3,
+            "F4" => key_vk = VK_F4,
+            "F5" => key_vk = VK_F5,
+            "F6" => key_vk = VK_F6,
+            "F7" => key_vk = VK_F7,
+            "F8" => key_vk = VK_F8,
+            "F9" => key_vk = VK_F9,
+            "F10" => key_vk = VK_F10,
+            "F11" => key_vk = VK_F11,
+            "F12" => key_vk = VK_F12,
             _ => logger::error(&format!("Warning: unknown hotkey part '{}'", part)),
         }
     }
@@ -55,7 +64,7 @@ pub fn parse_and_register(hwnd: HWND, hotkey_str: &str) {
     // doesn't silently fail to register any hotkey.
     if key_vk == 0 {
         logger::error(&format!("Warning: could not parse hotkey '{}', defaulting to 'Ctrl+Shift+W'", hotkey_str));
-        modifiers = HOT_KEY_MODIFIERS(0x0002 | 0x0004); // Ctrl+Shift
+        modifiers = HOT_KEY_MODIFIERS(MOD_CONTROL | MOD_SHIFT);
         key_vk = 'W' as u32;
     }
 

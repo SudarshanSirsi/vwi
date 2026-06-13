@@ -2,6 +2,7 @@ use crate::logger;
 use crate::models::UiConfig;
 use crate::switcher::Switcher;
 use crate::tray;
+use crate::vk::*;
 use crate::windows::activate_window;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -236,267 +237,54 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
         WM_PAINT => {
             unsafe {
                 let mut ps = PAINTSTRUCT::default();
-                let hdc = BeginPaint(hwnd, &mut ps);
+                let hdc_screen = BeginPaint(hwnd, &mut ps);
 
                 let mut rect = RECT::default();
                 let _ = GetClientRect(hwnd, &mut rect);
-                let visible_height = rect.bottom - rect.top;
 
-                // Read UI config so colors and sizes are customizable.
-                let ui = APP_STATE.with(|s| {
-                    s.borrow().as_ref().map(|state| {
+                // ── Double-buffering: draw to memory DC, blit once to screen ──
+                let mem_dc = CreateCompatibleDC(Some(hdc_screen));
+                let mem_bmp = CreateCompatibleBitmap(
+                    hdc_screen,
+                    rect.right - rect.left,
+                    rect.bottom - rect.top,
+                );
+                let old_bmp = SelectObject(mem_dc, mem_bmp.into());
+
+                APP_STATE.with(|s| {
+                    if let Some(state) = s.borrow().as_ref() {
                         let st = state.borrow();
                         let switcher = st.switcher.borrow();
-                        switcher.get_config().ui.clone()
-                    }).unwrap_or_default()
+                        let cfg = switcher.get_config();
+                        let ui = &cfg.ui;
+                        let visible_height = rect.bottom - rect.top;
+
+                        crate::overlay_paint::paint(
+                            mem_dc,
+                            &rect,
+                            ui,
+                            st.scroll_offset,
+                            st.list_mode,
+                            &switcher,
+                            visible_height,
+                        );
+                    } else {
+                        let hbr = CreateSolidBrush(COLORREF(UiConfig::default().bg_color));
+                        let _ = FillRect(mem_dc, &rect, hbr);
+                        let _ = DeleteObject(hbr.into());
+                    }
                 });
 
-                // Fill the entire client area with our dark background color.
-                let hbr = CreateSolidBrush(COLORREF(ui.bg_color));
-                let _ = FillRect(hdc, &rect, hbr);
-                let _ = DeleteObject(hbr.into());
+                // Blit the finished off-screen image to the real screen DC in one copy.
+                let width = rect.right - rect.left;
+                let height = rect.bottom - rect.top;
+                let _ = BitBlt(hdc_screen, 0, 0, width, height, Some(mem_dc), 0, 0, SRCCOPY);
 
-                // Draw a subtle 1px border so the popup doesn't blend into
-                // other dark windows.
-                let hpen = CreatePen(PS_SOLID, 1, COLORREF(ui.border_color));
-                let old_pen = SelectObject(hdc, hpen.into());
-                let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-                let _ = Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
-                let _ = SelectObject(hdc, old_brush);
-                let _ = SelectObject(hdc, old_pen);
-                let _ = DeleteObject(hpen.into());
+                // Cleanup memory resources.
+                let _ = SelectObject(mem_dc, old_bmp);
+                let _ = DeleteObject(mem_bmp.into());
+                let _ = DeleteDC(mem_dc);
 
-                // Create normal and bold fonts for titles and keyboard keys.
-                let hfont_normal = CreateFontW(
-                    ui.font_height,
-                    0,
-                    0,
-                    0,
-                    FW_NORMAL.0 as i32,
-                    0,
-                    0,
-                    0,
-                    DEFAULT_CHARSET,
-                    OUT_DEFAULT_PRECIS,
-                    CLIP_DEFAULT_PRECIS,
-                    DEFAULT_QUALITY,
-                    (FIXED_PITCH.0 | FF_MODERN.0) as u32,
-                    w!("Segoe UI"),
-                );
-                let hfont_bold = CreateFontW(
-                    ui.font_height,
-                    0,
-                    0,
-                    0,
-                    FW_BOLD.0 as i32,
-                    0,
-                    0,
-                    0,
-                    DEFAULT_CHARSET,
-                    OUT_DEFAULT_PRECIS,
-                    CLIP_DEFAULT_PRECIS,
-                    DEFAULT_QUALITY,
-                    (FIXED_PITCH.0 | FF_MODERN.0) as u32,
-                    w!("Segoe UI"),
-                );
-                let old_font = SelectObject(hdc, hfont_normal.into());
-                let _ = SetBkMode(hdc, TRANSPARENT);
-
-                // Render content: either configured project matches or the
-                // diagnostic "all visible windows" list.
-                let state_opt = APP_STATE.with(|s| s.borrow().as_ref().cloned());
-                let mut content_height = 0i32;
-                let mut scrollbar_needed = false;
-                if let Some(state) = state_opt {
-                    let st = state.borrow();
-                    let switcher = st.switcher.borrow();
-                    let cfg = switcher.get_config();
-                    let ui = &cfg.ui;
-                    let scroll_offset = st.scroll_offset;
-                    let mut y = ui.pad_y;
-                    let icon_size = ui.icon_size.max(0);
-                    let icon_gap = if icon_size > 0 { 8 } else { 0 };
-
-                    let item_count = if st.list_mode {
-                        crate::windows::enumerate_visible_windows().len() + 1
-                    } else {
-                        switcher.matches().len()
-                    };
-                    content_height = ui.pad_y * 2 + (item_count as i32).max(1) * ui.line_height;
-                    scrollbar_needed = ui.max_height > 0 && content_height > visible_height;
-
-                    if st.list_mode {
-                        // Diagnostic mode: show every visible window so the
-                        // user can discover exact titles for their config.
-                        let header = "All Visible Windows (press L to return)";
-                        let header_y = y - scroll_offset;
-                        if header_y + ui.line_height > 0 && header_y < visible_height {
-                            let _ = SetTextColor(hdc, COLORREF(ui.key_color));
-                            let header_wide: Vec<u16> = header.encode_utf16().collect();
-                            let _ = TextOutW(hdc, ui.pad_x, header_y, &header_wide);
-                        }
-                        y += ui.line_height;
-
-                        let all_windows = crate::windows::enumerate_visible_windows();
-                        for (idx, win) in all_windows.iter().enumerate() {
-                            let item_y = y - scroll_offset;
-                            if item_y + ui.line_height > 0 && item_y < visible_height {
-                                let mut content_x = ui.pad_x;
-
-                                // Draw window icon if enabled
-                                if icon_size > 0 {
-                                    if let Some(icon) = crate::windows::get_window_icon(win.hwnd) {
-                                        let icon_y = item_y + (ui.line_height - icon_size) / 2;
-                                        let _ = DrawIconEx(
-                                            hdc, content_x, icon_y, icon,
-                                            icon_size, icon_size, 0, None, DI_NORMAL,
-                                        );
-                                    }
-                                    content_x += icon_size + icon_gap;
-                                }
-
-                                let num_str = format!("{}.", idx + 1);
-                                let _ = SetTextColor(hdc, COLORREF(ui.key_color));
-                                let num_wide: Vec<u16> = num_str.encode_utf16().collect();
-                                let _ = TextOutW(hdc, content_x, item_y, &num_wide);
-
-                                let mut num_size = SIZE::default();
-                                let _ = GetTextExtentPoint32W(hdc, &num_wide, &mut num_size);
-                                let title_x = content_x + num_size.cx + 12;
-
-                                let _ = SetTextColor(hdc, COLORREF(ui.text_color));
-                                let title_wide: Vec<u16> = win.title.encode_utf16().collect();
-                                let _ = TextOutW(hdc, title_x, item_y, &title_wide);
-                            }
-                            y += ui.line_height;
-                        }
-                    } else {
-                        // Normal mode: show configured project matches.
-                        let matches = switcher.matches();
-                        if matches.is_empty() {
-                            // Empty state
-                            let msg1 = "No matching windows";
-                            let msg2 = "Press L to see all visible windows";
-                            let center_y = visible_height / 2 - ui.line_height;
-
-                            let _ = SetTextColor(hdc, COLORREF(ui.text_color));
-                            let wide1: Vec<u16> = msg1.encode_utf16().collect();
-                            let mut size1 = SIZE::default();
-                            let _ = GetTextExtentPoint32W(hdc, &wide1, &mut size1);
-                            let x1 = (rect.right - rect.left - size1.cx) / 2;
-                            let _ = TextOutW(hdc, x1, center_y, &wide1);
-
-                            let _ = SetTextColor(hdc, COLORREF(ui.border_color));
-                            let wide2: Vec<u16> = msg2.encode_utf16().collect();
-                            let mut size2 = SIZE::default();
-                            let _ = GetTextExtentPoint32W(hdc, &wide2, &mut size2);
-                            let x2 = (rect.right - rect.left - size2.cx) / 2;
-                            let _ = TextOutW(hdc, x2, center_y + ui.line_height, &wide2);
-                        } else {
-                            for (key, title, hwnd) in matches {
-                                let item_y = y - scroll_offset;
-                                if item_y + ui.line_height > 0 && item_y < visible_height {
-                                    let mut content_x = ui.pad_x;
-
-                                    // Draw window icon if enabled
-                                    if icon_size > 0 {
-                                        if let Some(icon) = crate::windows::get_window_icon(hwnd) {
-                                            let icon_y = item_y + (ui.line_height - icon_size) / 2;
-                                            let _ = DrawIconEx(
-                                                hdc, content_x, icon_y, icon,
-                                                icon_size, icon_size, 0, None, DI_NORMAL,
-                                            );
-                                        }
-                                        content_x += icon_size + icon_gap;
-                                    }
-
-                                    // Measure key text with bold font
-                                    let _ = SelectObject(hdc, hfont_bold.into());
-                                    let key_wide: Vec<u16> = key.encode_utf16().collect();
-                                    let mut key_size = SIZE::default();
-                                    let _ = GetTextExtentPoint32W(hdc, &key_wide, &mut key_size);
-
-                                    // Draw key box background
-                                    let box_pad_x = 6;
-                                    let box_pad_y = 3;
-                                    let box_w = key_size.cx + box_pad_x * 2;
-                                    let box_h = key_size.cy + box_pad_y * 2;
-                                    let box_x = content_x;
-                                    let box_y = item_y + (ui.line_height - box_h) / 2;
-
-                                    let box_brush = CreateSolidBrush(COLORREF(ui.key_box_color));
-                                    let box_rect = RECT {
-                                        left: box_x,
-                                        top: box_y,
-                                        right: box_x + box_w,
-                                        bottom: box_y + box_h,
-                                    };
-                                    let _ = FillRect(hdc, &box_rect, box_brush);
-                                    let _ = DeleteObject(box_brush.into());
-
-                                    // Draw key text centered in box
-                                    let _ = SetTextColor(hdc, COLORREF(ui.key_color));
-                                    let _ = TextOutW(hdc, box_x + box_pad_x, box_y + box_pad_y, &key_wide);
-
-                                    // Switch back to normal font for title
-                                    let _ = SelectObject(hdc, hfont_normal.into());
-
-                                    // Draw the window title
-                                    let title_x = box_x + box_w + 12;
-                                    let _ = SetTextColor(hdc, COLORREF(ui.text_color));
-                                    let title_wide: Vec<u16> = title.encode_utf16().collect();
-                                    let _ = TextOutW(hdc, title_x, item_y, &title_wide);
-                                }
-                                y += ui.line_height;
-                            }
-                        }
-                    }
-                }
-
-                // Draw scrollbar if content exceeds the window height.
-                if scrollbar_needed {
-                    let track_x = rect.right - 10;
-                    let track_w = 6;
-                    let track_top = ui.pad_y;
-                    let track_bottom = visible_height - ui.pad_y;
-
-                    // Track
-                    let track_brush = CreateSolidBrush(COLORREF(ui.border_color));
-                    let track_rect = RECT {
-                        left: track_x,
-                        top: track_top,
-                        right: track_x + track_w,
-                        bottom: track_bottom,
-                    };
-                    let _ = FillRect(hdc, &track_rect, track_brush);
-                    let _ = DeleteObject(track_brush.into());
-
-                    // Thumb
-                    let scroll_offset = APP_STATE.with(|s| {
-                        s.borrow().as_ref().map(|state| state.borrow().scroll_offset).unwrap_or(0)
-                    });
-                    let track_h = track_bottom - track_top;
-                    let thumb_h = (track_h * visible_height / content_height.max(1))
-                        .max(20)
-                        .min(track_h);
-                    let thumb_range = (track_h - thumb_h).max(1);
-                    let scroll_range = (content_height - visible_height).max(1);
-                    let thumb_y = track_top + scroll_offset * thumb_range / scroll_range;
-
-                    let thumb_brush = CreateSolidBrush(COLORREF(ui.key_color));
-                    let thumb_rect = RECT {
-                        left: track_x,
-                        top: thumb_y,
-                        right: track_x + track_w,
-                        bottom: thumb_y + thumb_h,
-                    };
-                    let _ = FillRect(hdc, &thumb_rect, thumb_brush);
-                    let _ = DeleteObject(thumb_brush.into());
-                }
-
-                let _ = SelectObject(hdc, old_font);
-                let _ = DeleteObject(hfont_normal.into());
-                let _ = DeleteObject(hfont_bold.into());
                 let _ = EndPaint(hwnd, &ps);
             }
             LRESULT(0)
@@ -507,15 +295,14 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
             let vk = wparam.0 as u32; // virtual-key code
 
             // Escape dismisses the overlay without switching.
-            if vk == 0x1B {
+            if vk == VK_ESCAPE {
                 hide_overlay(hwnd);
                 return LRESULT(0);
             }
 
             // F5 reloads the configuration from disk without restarting.
             // Useful when the user edits config.toml while the app is running.
-            if vk == 0x74 {
-                // F5
+            if vk == VK_F5 {
                 logger::info("F5 pressed — reloading config...");
                 let reloaded = APP_STATE.with(|s| {
                     s.borrow().as_ref().map(|state| {
@@ -541,7 +328,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
             // with their titles so the user can discover exact names for
             // their config.  This does NOT interfere with a project key
             // bound to 'l' — that is checked first below.
-            if vk == 0x4C {
+            if vk == VK_L {
                 let (list_mode, all_count, ui) = APP_STATE.with(|s| {
                     s.borrow().as_ref().map(|state| {
                         let mut st = state.borrow_mut();
@@ -585,7 +372,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
 
             // Up/Down arrows scroll the overlay when max_height is set and
             // the content exceeds the window size.
-            if vk == 0x26 || vk == 0x28 {
+            if vk == VK_UP || vk == VK_DOWN {
                 let scrolled = APP_STATE.with(|s| {
                     s.borrow().as_ref().map(|state| {
                         let mut st = state.borrow_mut();
@@ -605,7 +392,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                             let visible_height = max_height;
                             if content_height > visible_height {
                                 let scroll_range = (content_height - visible_height).max(1);
-                                let delta = if vk == 0x26 { -line_height } else { line_height };
+                                let delta = if vk == VK_UP { -line_height } else { line_height };
                                 st.scroll_offset = (st.scroll_offset + delta)
                                     .clamp(0, scroll_range);
                                 true
@@ -629,9 +416,9 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
             // Convert VK codes for letters and digits into Rust chars.
             // We only care about single alphanumeric keys; everything
             // else is ignored.
-            let key_char = if vk >= 0x30 && vk <= 0x39 {
+            let key_char = if vk >= VK_0 && vk <= VK_9 {
                 (vk as u8) as char
-            } else if vk >= 0x41 && vk <= 0x5A {
+            } else if vk >= VK_A && vk <= VK_Z {
                 (vk as u8) as char
             } else {
                 '\0'

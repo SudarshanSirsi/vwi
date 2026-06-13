@@ -2,6 +2,7 @@ use crate::models::WindowInfo;
 use windows::{
     Win32::{
         Foundation::{HWND, LPARAM, WPARAM},
+        Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED},
         UI::WindowsAndMessaging::{
             EnumWindows, GetClassLongPtrW, GetWindowTextLengthW, GetWindowTextW, IsIconic,
             IsWindowVisible, IsZoomed, SendMessageW, SetForegroundWindow, ShowWindow, GCLP_HICON,
@@ -39,6 +40,20 @@ unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         // Filter: only windows the user can actually see.
         if !IsWindowVisible(hwnd).as_bool() {
             return BOOL(1); // keep enumerating
+        }
+
+        // Filter out DWM-cloaked windows (UWP background shells, input panels,
+        // Settings ghost windows, etc.) that report visible but are hidden
+        // from the user by the compositor.
+        let mut cloaked: u32 = 0;
+        let result = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            &mut cloaked as *mut _ as *mut _,
+            std::mem::size_of::<u32>() as u32,
+        );
+        if result.is_ok() && cloaked != 0 {
+            return BOOL(1); // cloaked window, skip
         }
 
         let len = GetWindowTextLengthW(hwnd);

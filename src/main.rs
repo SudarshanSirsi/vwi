@@ -7,12 +7,15 @@
 
 mod app;      // Main application loop and orchestration
 mod config;   // TOML configuration loading
+mod defaults; // Central place for all application default values
 mod hotkey;   // Global hotkey registration via Win32 RegisterHotKey
 mod logger;   // File logging to %APPDATA%\vwi\vwi.log
-mod models;   // Shared data structures (Config, WindowInfo, etc.)
-mod overlay;  // Borderless popup window for the switcher UI
+mod models;        // Shared data structures (Config, WindowInfo, etc.)
+mod overlay;       // Borderless popup window for the switcher UI
+mod overlay_paint; // WM_PAINT rendering logic (icons, key badges, scrollbar)
 mod switcher; // Window matching logic and focus switching
 mod tray;     // System tray icon with right-click menu
+mod vk;       // Win32 virtual-key codes and hotkey modifiers
 mod windows;  // Win32 window enumeration and activation helpers
 
 fn main() {
