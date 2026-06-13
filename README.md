@@ -40,23 +40,11 @@ VWi gives each project a single-key shortcut. Press your global hotkey, see the 
 .\build.ps1 -OutputPath "C:\Tools\vwi.exe"
 ```
 
-**Linux / macOS / Git Bash / WSL:**
-
-```bash
-# Make executable and run
-chmod +x build.sh
-./build.sh
-
-# Optional: specify a custom output path
-./build.sh /usr/local/bin/vwi
-```
-
 **Or manually:**
 
 ```bash
 cargo build --release
-# Windows binary: target\release\vwi.exe
-# Unix binary:    target/release/vwi
+# Binary: target\release\vwi.exe
 ```
 
 ### 2. Create Config
