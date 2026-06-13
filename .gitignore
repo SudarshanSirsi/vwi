@@ -1,1 +1,21 @@
+# Rust build artifacts
 /target
+
+# Compiled binaries and debug symbols
+*.exe
+*.pdb
+
+# Log files
+*.log
+
+# IDE settings
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Old project artifacts
+wiwi.png

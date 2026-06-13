@@ -23,7 +23,6 @@ VWi gives each project a single-key shortcut. Press your global hotkey, see the 
 - **Multi-monitor aware** — overlay appears centered on the monitor of the currently focused window
 - **System tray icon** — orange VWi icon in the system tray with right-click menu (Show Overlay, Reload Config, Open Config Folder, Quit)
 - **File logging** — writes to `%APPDATA%\vwi\vwi.log` for debugging
-- **Embedded icon** — icon ships inside `vwi.exe`; no separate `.ico` file needed at runtime
 - **Preserves window state** — maximized windows stay maximized
 - **Single EXE** — no installer, no dependencies
 
@@ -111,19 +110,19 @@ hotkey = "Ctrl+Alt+W"
 
 [projects.backend]
 key = "b"
-match = "credilinq.backend"
+match = "myproject.backend"
 
-[projects.react]
-key = "r"
-match = "alexi.react"
+[projects.frontend]
+key = "f"
+match = "myproject.frontend"
 
-[projects.poc]
-key = "p"
-match = "alexi.poc.keystone"
+[projects.docs]
+key = "d"
+match = "myproject.docs"
 
-[projects.alexi]
-key = "a"
-match = "credilinq.alexi"
+[projects.main]
+key = "m"
+match = "myproject.main"
 ```
 
 ### Hotkey Format
@@ -172,7 +171,7 @@ The `match` string is checked against the full window title. A window matches if
 title.contains(match_pattern)
 ```
 
-This means VS Code windows like `credilinq.backend - Devin - shareholders.service.ts` match `credilinq.backend` regardless of the current file.
+This means VS Code windows like `myproject.backend - VS Code - main.rs` match `myproject.backend` regardless of the current file.
 
 ## Overlay Controls
 

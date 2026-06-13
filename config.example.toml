@@ -24,16 +24,16 @@ hotkey = "Ctrl+Shift+Space"
 
 [projects.backend]
 key = "b"
-match = "credilinq.backend"
+match = "myproject.backend"
 
-[projects.react]
-key = "r"
-match = "alexi.react"
+[projects.frontend]
+key = "f"
+match = "myproject.frontend"
 
-[projects.poc]
-key = "p"
-match = "alexi.poc.keystone"
+[projects.docs]
+key = "d"
+match = "myproject.docs"
 
-[projects.alexi]
-key = "a"
-match = "credilinq.alexi"
+[projects.main]
+key = "m"
+match = "myproject.main"
