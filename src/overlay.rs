@@ -266,9 +266,8 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                 let _ = SelectObject(hdc, old_pen);
                 let _ = DeleteObject(hpen.into());
 
-                // Create a modern UI font.  Segoe UI is the Windows system
-                // font and renders cleanly at small sizes.
-                let hfont = CreateFontW(
+                // Create normal and bold fonts for titles and keyboard keys.
+                let hfont_normal = CreateFontW(
                     ui.font_height,
                     0,
                     0,
@@ -284,8 +283,24 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                     (FIXED_PITCH.0 | FF_MODERN.0) as u32,
                     w!("Segoe UI"),
                 );
-                let old_font = SelectObject(hdc, hfont.into());
-                let _ = SetBkMode(hdc, TRANSPARENT); // don't paint behind text
+                let hfont_bold = CreateFontW(
+                    ui.font_height,
+                    0,
+                    0,
+                    0,
+                    FW_BOLD.0 as i32,
+                    0,
+                    0,
+                    0,
+                    DEFAULT_CHARSET,
+                    OUT_DEFAULT_PRECIS,
+                    CLIP_DEFAULT_PRECIS,
+                    DEFAULT_QUALITY,
+                    (FIXED_PITCH.0 | FF_MODERN.0) as u32,
+                    w!("Segoe UI"),
+                );
+                let old_font = SelectObject(hdc, hfont_normal.into());
+                let _ = SetBkMode(hdc, TRANSPARENT);
 
                 // Render content: either configured project matches or the
                 // diagnostic "all visible windows" list.
@@ -299,6 +314,8 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                     let ui = &cfg.ui;
                     let scroll_offset = st.scroll_offset;
                     let mut y = ui.pad_y;
+                    let icon_size = ui.icon_size.max(0);
+                    let icon_gap = if icon_size > 0 { 8 } else { 0 };
 
                     let item_count = if st.list_mode {
                         crate::windows::enumerate_visible_windows().len() + 1
@@ -324,14 +341,28 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                         for (idx, win) in all_windows.iter().enumerate() {
                             let item_y = y - scroll_offset;
                             if item_y + ui.line_height > 0 && item_y < visible_height {
+                                let mut content_x = ui.pad_x;
+
+                                // Draw window icon if enabled
+                                if icon_size > 0 {
+                                    if let Some(icon) = crate::windows::get_window_icon(win.hwnd) {
+                                        let icon_y = item_y + (ui.line_height - icon_size) / 2;
+                                        let _ = DrawIconEx(
+                                            hdc, content_x, icon_y, icon,
+                                            icon_size, icon_size, 0, None, DI_NORMAL,
+                                        );
+                                    }
+                                    content_x += icon_size + icon_gap;
+                                }
+
                                 let num_str = format!("{}.", idx + 1);
                                 let _ = SetTextColor(hdc, COLORREF(ui.key_color));
                                 let num_wide: Vec<u16> = num_str.encode_utf16().collect();
-                                let _ = TextOutW(hdc, ui.pad_x, item_y, &num_wide);
+                                let _ = TextOutW(hdc, content_x, item_y, &num_wide);
 
                                 let mut num_size = SIZE::default();
                                 let _ = GetTextExtentPoint32W(hdc, &num_wide, &mut num_size);
-                                let title_x = ui.pad_x + num_size.cx + 12;
+                                let title_x = content_x + num_size.cx + 12;
 
                                 let _ = SetTextColor(hdc, COLORREF(ui.text_color));
                                 let title_wide: Vec<u16> = win.title.encode_utf16().collect();
@@ -342,25 +373,82 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                     } else {
                         // Normal mode: show configured project matches.
                         let matches = switcher.matches();
-                        for (key, title, _hwnd) in matches {
-                            let item_y = y - scroll_offset;
-                            if item_y + ui.line_height > 0 && item_y < visible_height {
-                                // Draw the shortcut key
-                                let _ = SetTextColor(hdc, COLORREF(ui.key_color));
-                                let key_wide: Vec<u16> = key.encode_utf16().collect();
-                                let _ = TextOutW(hdc, ui.pad_x, item_y, &key_wide);
+                        if matches.is_empty() {
+                            // Empty state
+                            let msg1 = "No matching windows";
+                            let msg2 = "Press L to see all visible windows";
+                            let center_y = visible_height / 2 - ui.line_height;
 
-                                // Measure key width so the title starts after it
-                                let mut key_size = SIZE::default();
-                                let _ = GetTextExtentPoint32W(hdc, &key_wide, &mut key_size);
-                                let title_x = ui.pad_x + key_size.cx + 16;
+                            let _ = SetTextColor(hdc, COLORREF(ui.text_color));
+                            let wide1: Vec<u16> = msg1.encode_utf16().collect();
+                            let mut size1 = SIZE::default();
+                            let _ = GetTextExtentPoint32W(hdc, &wide1, &mut size1);
+                            let x1 = (rect.right - rect.left - size1.cx) / 2;
+                            let _ = TextOutW(hdc, x1, center_y, &wide1);
 
-                                // Draw the window title
-                                let _ = SetTextColor(hdc, COLORREF(ui.text_color));
-                                let title_wide: Vec<u16> = title.encode_utf16().collect();
-                                let _ = TextOutW(hdc, title_x, item_y, &title_wide);
+                            let _ = SetTextColor(hdc, COLORREF(ui.border_color));
+                            let wide2: Vec<u16> = msg2.encode_utf16().collect();
+                            let mut size2 = SIZE::default();
+                            let _ = GetTextExtentPoint32W(hdc, &wide2, &mut size2);
+                            let x2 = (rect.right - rect.left - size2.cx) / 2;
+                            let _ = TextOutW(hdc, x2, center_y + ui.line_height, &wide2);
+                        } else {
+                            for (key, title, hwnd) in matches {
+                                let item_y = y - scroll_offset;
+                                if item_y + ui.line_height > 0 && item_y < visible_height {
+                                    let mut content_x = ui.pad_x;
+
+                                    // Draw window icon if enabled
+                                    if icon_size > 0 {
+                                        if let Some(icon) = crate::windows::get_window_icon(hwnd) {
+                                            let icon_y = item_y + (ui.line_height - icon_size) / 2;
+                                            let _ = DrawIconEx(
+                                                hdc, content_x, icon_y, icon,
+                                                icon_size, icon_size, 0, None, DI_NORMAL,
+                                            );
+                                        }
+                                        content_x += icon_size + icon_gap;
+                                    }
+
+                                    // Measure key text with bold font
+                                    let _ = SelectObject(hdc, hfont_bold.into());
+                                    let key_wide: Vec<u16> = key.encode_utf16().collect();
+                                    let mut key_size = SIZE::default();
+                                    let _ = GetTextExtentPoint32W(hdc, &key_wide, &mut key_size);
+
+                                    // Draw key box background
+                                    let box_pad_x = 6;
+                                    let box_pad_y = 3;
+                                    let box_w = key_size.cx + box_pad_x * 2;
+                                    let box_h = key_size.cy + box_pad_y * 2;
+                                    let box_x = content_x;
+                                    let box_y = item_y + (ui.line_height - box_h) / 2;
+
+                                    let box_brush = CreateSolidBrush(COLORREF(ui.key_box_color));
+                                    let box_rect = RECT {
+                                        left: box_x,
+                                        top: box_y,
+                                        right: box_x + box_w,
+                                        bottom: box_y + box_h,
+                                    };
+                                    let _ = FillRect(hdc, &box_rect, box_brush);
+                                    let _ = DeleteObject(box_brush.into());
+
+                                    // Draw key text centered in box
+                                    let _ = SetTextColor(hdc, COLORREF(ui.key_color));
+                                    let _ = TextOutW(hdc, box_x + box_pad_x, box_y + box_pad_y, &key_wide);
+
+                                    // Switch back to normal font for title
+                                    let _ = SelectObject(hdc, hfont_normal.into());
+
+                                    // Draw the window title
+                                    let title_x = box_x + box_w + 12;
+                                    let _ = SetTextColor(hdc, COLORREF(ui.text_color));
+                                    let title_wide: Vec<u16> = title.encode_utf16().collect();
+                                    let _ = TextOutW(hdc, title_x, item_y, &title_wide);
+                                }
+                                y += ui.line_height;
                             }
-                            y += ui.line_height;
                         }
                     }
                 }
@@ -407,7 +495,8 @@ unsafe extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
                 }
 
                 let _ = SelectObject(hdc, old_font);
-                let _ = DeleteObject(hfont.into());
+                let _ = DeleteObject(hfont_normal.into());
+                let _ = DeleteObject(hfont_bold.into());
                 let _ = EndPaint(hwnd, &ps);
             }
             LRESULT(0)

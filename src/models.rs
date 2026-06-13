@@ -50,6 +50,13 @@ pub struct UiConfig {
     /// window is capped at this size.
     #[serde(default = "default_max_height")]
     pub max_height: i32,
+    /// Size of window icons drawn next to each item, in pixels.
+    /// 0 disables icons.
+    #[serde(default = "default_icon_size")]
+    pub icon_size: i32,
+    /// Background color of the keyboard-key badge behind shortcut keys.
+    #[serde(default = "default_key_box_color")]
+    pub key_box_color: u32,
 }
 
 impl Default for UiConfig {
@@ -66,6 +73,8 @@ impl Default for UiConfig {
             border_color: 0x333333,
             show_overlay: true,
             max_height: 0,
+            icon_size: 20,
+            key_box_color: 0x333333,
         }
     }
 }
@@ -81,6 +90,8 @@ fn default_bg_color() -> u32 { 0x1A1A1A }
 fn default_border_color() -> u32 { 0x333333 }
 fn default_show_overlay() -> bool { true }
 fn default_max_height() -> i32 { 0 }
+fn default_icon_size() -> i32 { 20 }
+fn default_key_box_color() -> u32 { 0x333333 }
 
 fn default_hotkey() -> String { "Ctrl+Shift+Space".to_string() }
 

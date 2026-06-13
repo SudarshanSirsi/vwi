@@ -1,10 +1,11 @@
 use crate::models::WindowInfo;
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM},
+        Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::{
-            EnumWindows, GetWindowTextLengthW, GetWindowTextW, IsIconic, IsWindowVisible, IsZoomed,
-            SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOWMAXIMIZED,
+            EnumWindows, GetClassLongPtrW, GetWindowTextLengthW, GetWindowTextW, IsIconic,
+            IsWindowVisible, IsZoomed, SendMessageW, SetForegroundWindow, ShowWindow, GCLP_HICON,
+            GCLP_HICONSM, HICON, ICON_BIG, ICON_SMALL, SW_RESTORE, SW_SHOWMAXIMIZED, WM_GETICON,
         },
     },
 };
@@ -80,5 +81,47 @@ pub fn activate_window(hwnd: HWND) {
             }
         }
         let _ = SetForegroundWindow(hwnd);
+    }
+}
+
+/// Attempts to extract an icon handle from the given window.
+/// Tries multiple fallbacks to maximise the chance of finding one.
+pub fn get_window_icon(hwnd: HWND) -> Option<HICON> {
+    unsafe {
+        // 1. Ask the window directly for its small icon.
+        let icon_small = SendMessageW(
+            hwnd,
+            WM_GETICON,
+            Some(WPARAM(ICON_SMALL as usize)),
+            Some(LPARAM(0)),
+        );
+        if icon_small.0 != 0 {
+            return Some(HICON(icon_small.0 as *mut _));
+        }
+
+        // 2. Ask for the big icon (some apps only set this).
+        let icon_big = SendMessageW(
+            hwnd,
+            WM_GETICON,
+            Some(WPARAM(ICON_BIG as usize)),
+            Some(LPARAM(0)),
+        );
+        if icon_big.0 != 0 {
+            return Some(HICON(icon_big.0 as *mut _));
+        }
+
+        // 3. Fall back to the window class small icon.
+        let hicon_sm = GetClassLongPtrW(hwnd, GCLP_HICONSM);
+        if hicon_sm != 0 {
+            return Some(HICON(hicon_sm as *mut _));
+        }
+
+        // 4. Last resort: class big icon.
+        let hicon = GetClassLongPtrW(hwnd, GCLP_HICON);
+        if hicon != 0 {
+            return Some(HICON(hicon as *mut _));
+        }
+
+        None
     }
 }
