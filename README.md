@@ -17,9 +17,12 @@ VWi gives each project a single-key shortcut. Press your global hotkey, see the 
 - **Single-key switching** — no Enter needed; press a key and switch instantly
 - **TOML config** — add projects without recompiling
 - **Runtime reload** — edit config and press F5 in the overlay
-- **Customizable UI** — colors, sizes, padding, and max height via config
+- **Customizable UI** — colors, sizes, padding, max height, icons, and key badges via config
+- **Window icons** — each item shows the application's native icon for faster visual scanning
+- **Keyboard key badges** — shortcut keys rendered as bold text inside styled boxes
 - **Scrollable overlay** — cap the overlay height with `max_height`; scroll via mouse wheel or arrow keys
 - **Diagnostic list mode** — press `L` to see all visible windows with titles (useful for writing `match` patterns)
+- **Empty state hint** — when no windows match, the overlay shows a helpful message
 - **Multi-monitor aware** — overlay appears centered on the monitor of the currently focused window
 - **System tray icon** — orange VWi icon in the system tray with right-click menu (Show Overlay, Reload Config, Open Config Folder, Quit)
 - **File logging** — writes to `%APPDATA%\vwi\vwi.log` for debugging

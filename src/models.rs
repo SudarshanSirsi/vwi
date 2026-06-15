@@ -1,3 +1,4 @@
+use crate::defaults::*;
 use std::collections::HashMap;
 use windows::Win32::Foundation::HWND;
 
@@ -50,39 +51,34 @@ pub struct UiConfig {
     /// window is capped at this size.
     #[serde(default = "default_max_height")]
     pub max_height: i32,
+    /// Size of window icons drawn next to each item, in pixels.
+    /// 0 disables icons.
+    #[serde(default = "default_icon_size")]
+    pub icon_size: i32,
+    /// Background color of the keyboard-key badge behind shortcut keys.
+    #[serde(default = "default_key_box_color")]
+    pub key_box_color: u32,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
-            font_height: 18,
-            line_height: 32,
-            pad_x: 24,
-            pad_y: 16,
-            min_width: 560,
-            key_color: 0xFFA500,
-            text_color: 0xE0E0E0,
-            bg_color: 0x1A1A1A,
-            border_color: 0x333333,
-            show_overlay: true,
-            max_height: 0,
+            font_height: FONT_HEIGHT,
+            line_height: LINE_HEIGHT,
+            pad_x: PAD_X,
+            pad_y: PAD_Y,
+            min_width: MIN_WIDTH,
+            key_color: KEY_COLOR,
+            text_color: TEXT_COLOR,
+            bg_color: BG_COLOR,
+            border_color: BORDER_COLOR,
+            show_overlay: SHOW_OVERLAY,
+            max_height: MAX_HEIGHT,
+            icon_size: ICON_SIZE,
+            key_box_color: KEY_BOX_COLOR,
         }
     }
 }
-
-fn default_font_height() -> i32 { 18 }
-fn default_line_height() -> i32 { 32 }
-fn default_pad_x() -> i32 { 24 }
-fn default_pad_y() -> i32 { 16 }
-fn default_min_width() -> i32 { 560 }
-fn default_key_color() -> u32 { 0xFFA500 }
-fn default_text_color() -> u32 { 0xE0E0E0 }
-fn default_bg_color() -> u32 { 0x1A1A1A }
-fn default_border_color() -> u32 { 0x333333 }
-fn default_show_overlay() -> bool { true }
-fn default_max_height() -> i32 { 0 }
-
-fn default_hotkey() -> String { "Ctrl+Shift+Space".to_string() }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct Config {
@@ -101,7 +97,7 @@ impl Default for Config {
     /// from ever firing.
     fn default() -> Self {
         Self {
-            hotkey: "Ctrl+Shift+Space".to_string(),
+            hotkey: HOTKEY.to_string(),
             projects: HashMap::new(),
             ui: UiConfig::default(),
         }
